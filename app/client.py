@@ -11,8 +11,12 @@ import os
 # cache: name -> (ip, expiry_time). old_answers keeps the last ip for stale fallback.
 cache = {}
 old_answers = {}
-stats = {"cache_hits": 0, "network_lookups": 0, "successes": 0, "failures": 0, "retries": 0}
+stats = {"cache_hits": 0, "network_lookups": 0, "successes": 0, "failures": 0, "retries": 0,
+         "ignored_replies": 0}  # ignored_replies = packets we received but did not accept
 last_id = random.randint(1, 60000)  # query ids count up from a random start
+
+VALID_STATUSES = ("OK", "NOT_FOUND")  # the only status values the spec allows
+MAX_TTL = 86400  # biggest TTL we accept (1 day); anything larger is treated as bad
 
 
 # Read the shared config file (one folder up from app/).
@@ -59,8 +63,44 @@ def get_server_addr():
     return (server["ip"], server["port"])
 
 
-# One attempt: send the query, wait up to timeout for a reply with the SAME id.
-# Replies with other ids (old, unknown, duplicate) are ignored. Returns reply or None.
+# True if ip is text in proper dotted form like 10.0.1.11 (4 numbers, each 0-255).
+def is_valid_ip(ip):
+    if not isinstance(ip, str):
+        return False
+    try:
+        socket.inet_pton(socket.AF_INET, ip)  # raises an error for anything not a real IPv4
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+# True if ttl is a whole number from 0 to MAX_TTL (True/False are not accepted).
+def is_valid_ttl(ttl):
+    if not isinstance(ttl, int) or isinstance(ttl, bool):
+        return False
+    return 0 <= ttl <= MAX_TTL
+
+
+# Check a reply before we trust it: same id and name as our query, known status,
+# and a sensible ip and ttl. Anything else is rejected.
+def is_valid_reply(data, query_id, name):
+    if not isinstance(data, dict):
+        return False
+    if data.get("id") != query_id:  # reply to some other query
+        return False
+    if data.get("name") != name:  # reply is about a different name
+        return False
+    if data.get("status") not in VALID_STATUSES:
+        return False
+    if not is_valid_ttl(data.get("ttl")):
+        return False
+    if data["status"] == "OK":
+        return is_valid_ip(data.get("ip"))  # OK must carry a real ip
+    return data.get("ip") is None  # NOT_FOUND must have ip = null
+
+
+# One attempt: send the query, wait up to timeout for a VALID reply to this query.
+# Replies that are malformed, mismatched, old or duplicate are ignored. Returns reply or None.
 def send_query(name, server_addr):
     query_id = new_query_id()
     query = {"id": query_id, "name": name, "type": "A"}
@@ -80,9 +120,12 @@ def send_query(name, server_addr):
         try:
             data = json.loads(packet.decode())
         except (ValueError, UnicodeDecodeError):
+            stats["ignored_replies"] += 1  # not JSON at all
             continue
-        if isinstance(data, dict) and data.get("id") == query_id:
+        if is_valid_reply(data, query_id, name):
             reply = data
+        else:
+            stats["ignored_replies"] += 1  # keep waiting for a good reply until timeout
     sock.close()
     return reply
 

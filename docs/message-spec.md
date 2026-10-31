@@ -35,6 +35,20 @@ The client only accepts a reply whose id matches the query it is waiting for.
 Replies with an old, unknown or duplicate id are ignored. The reply's source IP is
 NOT checked, because the controller rewrites addresses.
 
+## Reply validation (client)
+The client checks every reply before it accepts or caches it. A reply is accepted only if ALL of these hold:
+1. It is a JSON object and its `id` equals the id of the query being waited for.
+2. Its `name` is exactly the name that was asked for.
+3. `status` is `OK` or `NOT_FOUND` (nothing else, case sensitive).
+4. `ttl` is a whole number from 0 to 86400 (text, decimals, negatives and true/false are rejected).
+5. If `status` is `OK`, `ip` is a proper dotted IPv4 address (like `10.0.1.11`).
+   If `status` is `NOT_FOUND`, `ip` must be `null`.
+
+Any other packet (not JSON, not an object, wrong name, bad status, bad ip, bad ttl) is ignored:
+it is not cached, it does not end the attempt, and the client keeps waiting until the timeout.
+Each ignored packet adds 1 to the `ignored_replies` counter in `get_stats()`.
+If only bad replies arrive, the attempt times out like a lost reply and the normal retry rules apply.
+
 ## TTL
 `ttl` is the number of seconds the client may keep the answer in its cache.
 While the entry is fresh, the client answers from cache and sends no packet.

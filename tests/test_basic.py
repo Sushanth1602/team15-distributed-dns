@@ -17,6 +17,8 @@ SERVER_PORT = 5301
 HB_PORT = 9999
 FAKE_PORT = 5400
 DEAD_PORT = 5999  # nothing listens here
+BAD_PORT = 5401  # fake server for the bad-reply test
+ONLY_BAD_PORT = 5402  # fake server that only sends bad replies
 results = []
 
 
@@ -55,6 +57,43 @@ def fake_server(sock):
     sock.sendto(json.dumps(wrong).encode(), addr)
     sock.sendto(json.dumps(right).encode(), addr)
     sock.sendto(json.dumps(right).encode(), addr)  # duplicate
+
+
+# Fake server for the validation test: for ONE query send many bad replies, then one good reply.
+def bad_then_good_server(sock):
+    packet, addr = sock.recvfrom(4096)
+    query = json.loads(packet.decode())
+    qid, name = query["id"], query["name"]
+    good = {"id": qid, "name": name, "ip": "1.2.3.4", "ttl": 30, "status": "OK"}
+    bad_replies = [
+        dict(good, name="other.lab"),      # name does not match the query
+        dict(good, status="MAYBE"),        # status not allowed
+        dict(good, status="ok"),           # wrong case, not allowed
+        dict(good, ip="999.1.1.1"),        # not a real IPv4
+        dict(good, ip="10.0.1"),           # too few parts
+        dict(good, ip=None),               # OK must have an ip
+        dict(good, ip=12345),              # ip is not text
+        dict(good, ttl=-5),                # negative ttl
+        dict(good, ttl="30"),              # ttl is text
+        dict(good, ttl=99999999),          # ttl too big
+        dict(good, ttl=True),              # bool is not a number here
+        dict(good, status="NOT_FOUND"),    # NOT_FOUND must have ip = null
+        ["not", "a", "dict"],              # valid JSON but not an object
+    ]
+    for reply in bad_replies:
+        sock.sendto(json.dumps(reply).encode(), addr)
+    sock.sendto(b"\xff\xfe not json", addr)  # not even JSON
+    sock.sendto(json.dumps(good).encode(), addr)
+    return len(bad_replies) + 1
+
+
+# Fake server that only ever sends a bad reply (wrong name), once per query.
+def only_bad_server(sock, rounds):
+    for i in range(rounds):
+        packet, addr = sock.recvfrom(4096)
+        query = json.loads(packet.decode())
+        bad = {"id": query["id"], "name": "other.lab", "ip": "1.2.3.4", "ttl": 30, "status": "OK"}
+        sock.sendto(json.dumps(bad).encode(), addr)
 
 
 def main():
@@ -140,6 +179,34 @@ def main():
     check("g) wrong-id and duplicate replies ignored", r["ip"] == "1.2.3.4" and r["attempts"] == 1,
           "ip=1.2.3.4 attempts=1 (9.9.9.9 ignored)", "ip=%s attempts=%d" % (r["ip"], r["attempts"]))
     fake_sock.close()
+
+
+    # i) malformed or mismatched replies are ignored, only the good one is accepted and cached
+    bad_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    bad_sock.bind(("127.0.0.1", BAD_PORT))
+    threading.Thread(target=bad_then_good_server, args=(bad_sock,), daemon=True).start()
+    reset_client(BAD_PORT)
+    r = client.resolve("check.lab")
+    s = client.get_stats()
+    ok = (r["ip"] == "1.2.3.4" and r["status"] == "OK" and r["attempts"] == 1
+          and s["ignored_replies"] == 14 and client.cache["check.lab"][0] == "1.2.3.4")
+    check("i) 14 bad replies ignored, good one accepted + cached", ok,
+          "ip=1.2.3.4 attempts=1 ignored_replies=14 cached ip=1.2.3.4",
+          "ip=%s attempts=%d ignored_replies=%d cached=%s" % (
+              r["ip"], r["attempts"], s["ignored_replies"], client.cache.get("check.lab")))
+    bad_sock.close()
+
+    # j) only bad replies ever arrive: nothing is cached, lookup ends as FAILED after all attempts
+    only_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    only_sock.bind(("127.0.0.1", ONLY_BAD_PORT))
+    threading.Thread(target=only_bad_server, args=(only_sock, 3), daemon=True).start()
+    reset_client(ONLY_BAD_PORT)
+    r = client.resolve("check.lab")
+    ok = r["status"] == "FAILED" and r["attempts"] == 3 and "check.lab" not in client.cache
+    check("j) only bad replies -> FAILED, nothing cached", ok,
+          "status=FAILED attempts=3 cache empty",
+          "status=%s attempts=%d cached=%s" % (r["status"], r["attempts"], client.cache.get("check.lab")))
+    only_sock.close()
 
     print("\n%d of %d tests passed" % (results.count(True), len(results)))
     sys.exit(0 if all(results) else 1)
