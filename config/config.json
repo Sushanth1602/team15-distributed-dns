@@ -1,0 +1,9 @@
+{
+  "local_host": "127.0.0.1",
+  "server_ports": [5301, 5302, 5303, 5304, 5305],
+  "virtual_resolver": {"ip": "10.0.0.53", "port": 5353},
+  "heartbeat": {"ip": "10.0.0.100", "port": 9999, "interval": 1, "max_missed": 3},
+  "client": {"timeout": 1, "max_retries": 3},
+  "baseline_mode": false,
+  "baseline_server": {"ip": "127.0.0.1", "port": 5301}
+}
