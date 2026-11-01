@@ -1,4 +1,5 @@
 
+
 import socket
 import json
 import os
@@ -32,7 +33,6 @@ INTERVAL = config["heartbeat"]["interval"]
 round_robin = itertools.count()
 
 
-# Find servers with fresh heartbeats.
 def get_healthy_servers():
     try:
         with open(HEARTBEAT_FILE) as f:
@@ -53,7 +53,6 @@ def get_healthy_servers():
     return healthy
 
 
-# Send a query to one DNS server.
 def query_server(query, server):
     ip, port = server
 
@@ -61,10 +60,7 @@ def query_server(query, server):
     sock.settimeout(TIMEOUT)
 
     try:
-        sock.sendto(
-            json.dumps(query).encode(),
-            (ip, port)
-        )
+        sock.sendto(json.dumps(query).encode(), (ip, port))
 
         while True:
             data, address = sock.recvfrom(4096)
@@ -90,17 +86,68 @@ def query_server(query, server):
         sock.close()
 
 
-# Send a response to the client.
 def send_response(sock, reply, client_addr):
-    sock.sendto(
-        json.dumps(reply).encode(),
-        client_addr
-    )
+    sock.sendto(json.dumps(reply).encode(), client_addr)
 
 
-# Main virtual DNS resolver.
+def handle_query(query):
+    """Process one DNS query and return its response."""
+
+    if (
+        not isinstance(query, dict)
+        or not isinstance(query.get("id"), int)
+        or isinstance(query.get("id"), bool)
+        or not isinstance(query.get("name"), str)
+        or query.get("type") != "A"
+    ):
+        return None
+
+    healthy = get_healthy_servers()
+
+    if not healthy:
+        return {
+            "id": query["id"],
+            "name": query["name"],
+            "ip": None,
+            "ttl": 0,
+            "status": "SERVFAIL"
+        }
+
+    start = next(round_robin) % len(healthy)
+    ordered = healthy[start:] + healthy[:start]
+
+    all_not_found = True
+
+    for server in ordered:
+        reply = query_server(query, server)
+
+        if reply is None:
+            all_not_found = False
+            continue
+
+        if reply["status"] == "OK":
+            return reply
+
+        if reply["status"] == "NOT_FOUND":
+            continue
+
+    if all_not_found:
+        status = "NOT_FOUND"
+    else:
+        status = "SERVFAIL"
+
+    return {
+        "id": query["id"],
+        "name": query["name"],
+        "ip": None,
+        "ttl": 0,
+        "status": status
+    }
+
+
 def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
     sock.bind((RESOLVER_IP, RESOLVER_PORT))
 
     print(
@@ -114,92 +161,9 @@ def main():
 
         try:
             query = json.loads(packet.decode())
+            response = handle_query(query)
 
-            if (
-                not isinstance(query, dict)
-                or not isinstance(query.get("id"), int)
-                or isinstance(query.get("id"), bool)
-                or not isinstance(query.get("name"), str)
-                or query.get("type") != "A"
-            ):
-                continue
-
-            healthy = get_healthy_servers()
-
-            # No healthy servers: network failure.
-            if not healthy:
-                failure = {
-                    "id": query["id"],
-                    "name": query["name"],
-                    "ip": None,
-                    "ttl": 0,
-                    "status": "SERVFAIL"
-                }
-
-                send_response(sock, failure, client_addr)
-
-                print("No healthy DNS servers available",
-                      flush=True)
-                continue
-
-            # Round-robin starting position.
-            start = next(round_robin) % len(healthy)
-            ordered = healthy[start:] + healthy[:start]
-
-            all_not_found = True
-
-            for server in ordered:
-                reply = query_server(query, server)
-
-                # A timeout means we cannot conclude NOT_FOUND.
-                if reply is None:
-                    all_not_found = False
-
-                    print(
-                        f"{server[0]} timed out; trying next server",
-                        flush=True
-                    )
-                    continue
-
-                # Successful resolution.
-                if reply["status"] == "OK":
-                    send_response(sock, reply, client_addr)
-
-                    print(
-                        f"{query['name']} resolved by {server[0]}",
-                        flush=True
-                    )
-                    break
-
-                # A genuine NOT_FOUND response.
-                if reply["status"] == "NOT_FOUND":
-                    print(
-                        f"{server[0]} returned NOT_FOUND",
-                        flush=True
-                    )
-
-            else:
-                if all_not_found:
-                    status = "NOT_FOUND"
-                    print(
-                        f"{query['name']} not found on healthy servers",
-                        flush=True
-                    )
-                else:
-                    status = "SERVFAIL"
-                    print(
-                        f"{query['name']} failed: server timeout",
-                        flush=True
-                    )
-
-                response = {
-                    "id": query["id"],
-                    "name": query["name"],
-                    "ip": None,
-                    "ttl": 0,
-                    "status": status
-                }
-
+            if response is not None:
                 send_response(sock, response, client_addr)
 
         except (ValueError, UnicodeDecodeError):
