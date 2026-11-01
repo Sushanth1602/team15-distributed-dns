@@ -7,6 +7,14 @@ HOST = "10.0.0.100"
 PORT = 9999
 HEARTBEAT_FILE = "/tmp/team15_heartbeats.json"
 
+DNS_SERVERS = {
+    "10.0.0.11",
+    "10.0.0.12",
+    "10.0.0.13",
+    "10.0.0.14",
+    "10.0.0.15"
+}
+
 heartbeats = {}
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -19,10 +27,10 @@ while True:
         data, address = sock.recvfrom(4096)
         message = json.loads(data.decode())
 
-        server_id = message.get("server_id")
+        server_ip = address[0]
 
-        if server_id:
-            heartbeats[server_id] = time.time()
+        if server_ip in DNS_SERVERS:
+            heartbeats[server_ip] = time.time()
 
             temp_file = HEARTBEAT_FILE + ".tmp"
 
@@ -31,7 +39,7 @@ while True:
 
             os.replace(temp_file, HEARTBEAT_FILE)
 
-            print(f"Heartbeat received from {server_id}", flush=True)
+            print(f"Heartbeat received from {server_ip}", flush=True)
 
     except (json.JSONDecodeError, UnicodeDecodeError):
         print("Ignored invalid heartbeat", flush=True)
