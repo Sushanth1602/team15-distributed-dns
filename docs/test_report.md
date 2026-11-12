@@ -118,27 +118,51 @@ from server failures in this experiment.
 
 ## 7. Limitations
 
-- Local tests used loopback networking.
-- Server configurations used unique UDP ports.
-- Benchmarks were sequential, not concurrent.
-- Actual Mininet and OpenFlow validation remains pending.
-- Real distributed network performance has not yet been measured.
+- Earlier localhost tests used loopback networking and sequential queries.
+- The Mininet performance sample contains 30 sequential queries, not a concurrent stress test.
+- Results depend on the VM, host and measurement implementation.
+- No production-scale capacity or Internet DNS performance claim is made.
 
-## 8. Pending Validation
+## 8. Validation Scope and Remaining Work
 
-- Mininet topology testing
-- Ryu controller integration
-- OpenFlow-based traffic steering
-- Actual distributed server failure and recovery
-- Network-level latency and throughput measurements
+- Functional Mininet and OpenFlow integration checks are documented in Section 10.
+- Larger concurrent-load and scalability experiments remain future work.
+- Production deployment and real-world network performance have not been established.
 
 ## 9. Conclusion
 
-The local testing phase recorded 27 passing tests covering
-basic UDP resolution, caching, TTL, resolver integration,
-server failure handling and recovery.
+The local test phase recorded 27 passing tests.
+The Mininet SDN topology was subsequently exercised for name resolution,
+NOT_FOUND handling, round-robin selection, caching, server failure,
+failover and recovery.
 
-Performance benchmarks and graphs were generated.
+The experiments validate the tested paths in their stated environments,
+but do not establish production-scale performance.
 
-Actual SDN validation is still required before claiming
-that the complete distributed DNS system has been validated.
+## 10. Additional Mininet/SDN Validation (November 2026)
+
+The project was subsequently tested in a Mininet topology running under Ubuntu 24.04 ARM64 in VMware Fusion on an Apple Silicon Mac.
+
+Observed functional results:
+- Topology connectivity: earlier pingall reported 56/56 received and 0% loss.
+- Known domain video.lab resolved successfully.
+- Unknown domain unknown.lab returned NOT_FOUND.
+- Server-specific answers from all five DNS servers were observed during round-robin testing.
+- A repeated lookup was served from the client cache.
+- Stopping DNS3 caused its heartbeat to become stale; the controller logged 10.0.0.13 FAILED.
+- Five fresh lookups while DNS3 was stopped all succeeded, with 0 failures and 0 retries.
+- After DNS3 restart, its heartbeat age was measured at 0.98 seconds and a subsequent query batch included a successful response from DNS3.
+
+### Mininet network-only performance sample
+
+The cache was cleared before each of 30 sequential lookups:
+- Successful: 30/30
+- Failed: 0
+- Cache hits: 0
+- Average reported latency: 0.800 ms
+- Minimum reported latency: 0.417 ms
+- Maximum reported latency: 3.480 ms
+
+A separate cache-enabled 30-query run recorded 30 successes: one network lookup at 1.580 ms and 29 cache hits with reported latency between 0 and 0.002 ms.
+
+The raw client result files are stored in `results/raw/`. These Mininet measurements are separate from the earlier localhost benchmarks and are not concurrent stress-test or production-network measurements.

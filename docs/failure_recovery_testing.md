@@ -84,15 +84,42 @@ within the tested application environment.
 
 ## 6. Limitations
 
-These tests do not independently prove real network-level
-OpenFlow traffic redirection or Mininet failure recovery.
+The automated resolver tests exercise application-level health detection,
+fallback, timeout and recovery logic.
 
-Actual SDN validation with Mininet, Open vSwitch and Ryu
-remains pending.
+The Mininet experiment is a separate network-level functional validation.
+Neither experiment is a large-scale load or concurrent stress test.
 
 ## 7. Conclusion
 
-The resolver's tested failure-handling mechanisms behaved
-as expected in the local test environment.
-Further network emulation is required to validate the
-complete distributed SDN architecture.
+The local automated tests recorded successful failure-handling and
+recovery behaviour. The additional Mininet experiment in Section 8
+also demonstrated DNS3 failure detection, continued resolution through
+healthy servers, and DNS3 recovery.
+
+## 8. Additional Mininet SDN Failure and Recovery Experiment (November 2026)
+
+Environment:
+- Five DNS servers in Mininet
+- OS-Ken controller using OpenFlow 1.3
+- Heartbeat receiver at 10.0.0.100:9999
+- DNS3 address: 10.0.0.13
+
+### DNS3 failure detection
+DNS3 was stopped. Its heartbeat became stale, and the controller log recorded `10.0.0.13 FAILED`.
+
+Result: PASS
+
+### Failover while DNS3 was stopped
+Five fresh video.lab queries were issued. All five returned status OK. Their server-specific answers corresponded to DNS4, DNS5, DNS1, DNS2 and DNS4. Client statistics recorded five network lookups, five successes, zero failures and zero retries.
+
+Result: PASS
+
+### DNS3 recovery
+DNS3 was restarted and reported listening on UDP port 5353. Its heartbeat age was measured at 0.98 seconds. A subsequent five-query batch returned five successful answers, including one answer from DNS3 (10.0.3.11).
+
+The controller log excerpt captured the FAILED transition but did not show a RECOVERED line. Recovery is therefore evidenced by the fresh heartbeat and the successful response from DNS3, not by a controller recovery log entry.
+
+Result: PASS
+
+These were functional checks in the Mininet test environment, not a large-scale load or concurrent stress test.
