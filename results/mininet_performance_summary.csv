@@ -1,0 +1,3 @@
+environment,scenario,queries,successful,failed,cache_hits,network_lookups,success_rate_percent,average_latency_ms,minimum_latency_ms,maximum_latency_ms,notes
+Mininet,network_only,30,30,0,0,30,100,0.800,0.417,3.480,"Cache cleared before each lookup; sequential client-reported measurements"
+Mininet,cache_enabled,30,30,0,29,1,100,0.053,,,"First lookup 1.580 ms; remaining 29 were cache hits reported between 0 and 0.002 ms"
