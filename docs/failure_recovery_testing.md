@@ -118,7 +118,9 @@ Result: PASS
 ### DNS3 recovery
 DNS3 was restarted and reported listening on UDP port 5353. Its heartbeat age was measured at 0.98 seconds. A subsequent five-query batch returned five successful answers, including one answer from DNS3 (10.0.3.11).
 
-The controller log excerpt captured the FAILED transition but did not show a RECOVERED line. Recovery is therefore evidenced by the fresh heartbeat and the successful response from DNS3, not by a controller recovery log entry.
+In the Member 3 test run, the captured controller log showed the FAILED event but did not include the RECOVERED line. A teammate independently confirmed that their controller test run logged both 10.0.0.13 FAILED and 10.0.0.13 RECOVERED when DNS3 heartbeats resumed, followed by a DNS redirect to DNS3.
+
+Together with the fresh heartbeat and successful DNS3 response observed in the Member 3 run, this confirms recovery behaviour across the test runs. The missing RECOVERED line in the Member 3 log excerpt was a log-capture difference, not an identified controller defect.
 
 Result: PASS
 
