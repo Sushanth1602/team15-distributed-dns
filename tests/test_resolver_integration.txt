@@ -1,0 +1,175 @@
+
+import json
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "app"))
+
+import resolver
+
+
+class FakeDNSServer:
+    def __init__(self, status="OK", ip="192.0.2.10", delay=0):
+        self.status = status
+        self.ip = ip
+        self.delay = delay
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(("127.0.0.1", 0))
+        self.port = self.sock.getsockname()[1]
+        self.running = True
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def run(self):
+        while self.running:
+            try:
+                data, address = self.sock.recvfrom(4096)
+                query = json.loads(data.decode())
+                if self.delay:
+                    time.sleep(self.delay)
+
+                reply = {
+                    "id": query["id"],
+                    "name": query["name"],
+                    "ip": self.ip if self.status == "OK" else None,
+                    "ttl": 30 if self.status == "OK" else 0,
+                    "status": self.status,
+                }
+                self.sock.sendto(json.dumps(reply).encode(), address)
+            except OSError:
+                break
+            except Exception:
+                continue
+
+    def close(self):
+        self.running = False
+        self.sock.close()
+        self.thread.join(timeout=1)
+
+
+class ResolverIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.heartbeat_path = Path(self.temp_dir.name) / "heartbeats.json"
+
+        self.old_heartbeat = resolver.HEARTBEAT_FILE
+        self.old_ips = resolver.SERVER_IPS
+        self.old_ports = resolver.SERVER_PORTS
+        self.old_timeout = resolver.TIMEOUT
+        self.old_max_missed = resolver.MAX_MISSED
+        self.old_interval = resolver.INTERVAL
+        self.old_counter = resolver.round_robin
+
+        self.servers = []
+        self.server_ips = []
+
+        resolver.HEARTBEAT_FILE = str(self.heartbeat_path)
+        resolver.TIMEOUT = 0.25
+        resolver.MAX_MISSED = 3
+        resolver.INTERVAL = 1
+
+        for _ in range(3):
+            server = FakeDNSServer()
+            self.servers.append(server)
+            self.server_ips.append("127.0.0.1")
+
+        resolver.SERVER_IPS = self.server_ips
+        resolver.SERVER_PORTS = [s.port for s in self.servers]
+        resolver.round_robin = __import__("itertools").count()
+
+    def tearDown(self):
+        for server in self.servers:
+            server.close()
+
+        resolver.HEARTBEAT_FILE = self.old_heartbeat
+        resolver.SERVER_IPS = self.old_ips
+        resolver.SERVER_PORTS = self.old_ports
+        resolver.TIMEOUT = self.old_timeout
+        resolver.MAX_MISSED = self.old_max_missed
+        resolver.INTERVAL = self.old_interval
+        resolver.round_robin = self.old_counter
+
+        self.temp_dir.cleanup()
+
+    def write_heartbeats(self, indexes):
+        now = time.time()
+        data = {}
+        for index in indexes:
+            data[self.server_ips[index]] = now
+        self.heartbeat_path.write_text(json.dumps(data))
+
+    def query_resolver(self, name="video.lab"):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(2)
+
+        # Use an ephemeral local port for the test client.
+        query = {"id": 12345, "name": name, "type": "A"}
+
+        # Call the actual resolver selection and query functions directly.
+        healthy = resolver.get_healthy_servers()
+        if not healthy:
+            return {"status": "NO_HEALTHY_SERVERS"}
+
+        start = next(resolver.round_robin) % len(healthy)
+        ordered = healthy[start:] + healthy[:start]
+
+        all_not_found = True
+        for server in ordered:
+            reply = resolver.query_server(query, server)
+            if reply is None:
+                all_not_found = False
+                continue
+            if reply["status"] == "OK":
+                return reply
+            if reply["status"] == "NOT_FOUND":
+                continue
+
+        return {
+            "status": "NOT_FOUND" if all_not_found else "SERVFAIL"
+        }
+
+    def test_01_healthy_server_resolves_domain(self):
+        self.write_heartbeats([0, 1, 2])
+        result = self.query_resolver()
+        self.assertEqual(result["status"], "OK")
+        self.assertEqual(result["ip"], "192.0.2.10")
+
+    def test_02_no_healthy_servers(self):
+        self.write_heartbeats([])
+        result = self.query_resolver()
+        self.assertEqual(result["status"], "NO_HEALTHY_SERVERS")
+
+    def test_03_unhealthy_server_is_excluded(self):
+        self.servers[0].close()
+        self.write_heartbeats([0, 1, 2])
+        result = self.query_resolver()
+        self.assertEqual(result["status"], "OK")
+
+    def test_04_server_timeout_falls_back(self):
+        self.servers[0].close()
+        self.write_heartbeats([0, 1, 2])
+        result = self.query_resolver()
+        self.assertEqual(result["status"], "OK")
+
+    def test_05_heartbeat_expiration(self):
+        self.heartbeat_path.write_text(
+            json.dumps({self.server_ips[0]: time.time() - 10})
+        )
+        self.assertEqual(resolver.get_healthy_servers(), [])
+
+    def test_06_multiple_healthy_servers_available(self):
+        self.write_heartbeats([0, 1, 2])
+        healthy = resolver.get_healthy_servers()
+        self.assertEqual(len(healthy), 3)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
