@@ -65,3 +65,11 @@ A separate 30-query run recorded:
 These are sequential client-reported measurements in the VMware/Mininet environment. They are not concurrent stress-test results or production-network benchmarks.
 
 The Mininet SDN path was validated through the controller's server selection and traffic steering. These observations should be distinguished from the separate application-level resolver unit and integration tests.
+
+## Recovery logging clarification
+
+The Member 3 controller log excerpt captured the DNS3 FAILED event.
+A teammate independently confirmed that another controller run logged
+both FAILED and RECOVERED transitions, followed by a DNS redirect to DNS3.
+The fresh heartbeat and successful DNS3 response were also observed in
+the Member 3 run.
