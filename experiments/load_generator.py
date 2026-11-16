@@ -287,6 +287,12 @@ def main():
     if args.servers > len(config["server_ports"]):
         parser.error("Not enough server ports in config.json")
 
+    # Use unique ports for local benchmark servers.
+    # Mininet continues using the ports from config/config.json.
+    config["server_ports"] = [
+        5300 + i for i in range(1, args.servers + 1)
+    ]
+
     domain = (
         "missing.lab"
         if args.scenario == "missing"

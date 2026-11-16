@@ -62,3 +62,36 @@ and provide baseline latency and throughput measurements.
 Further testing in Mininet with Ryu is required to evaluate
 distributed server selection, failure handling and SDN
 controller behaviour.
+
+## 8. Additional Benchmark Results — November 16, 2026
+
+Environment:
+- Operating System: macOS
+- Python: 3.13.5
+- Protocol: UDP
+- Network: localhost (127.0.0.1)
+- Workload: 100 sequential queries per configuration
+- DNS server configurations: 1, 3 and 5
+
+### Results
+
+| DNS Servers | Queries | Successful | Failed | Average Latency (ms) | P95 Latency (ms) | Throughput (QPS) |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 100 | 100 | 0 | 1.4469 | 3.9101 | 691.11 |
+| 3 | 100 | 100 | 0 | 0.9975 | 1.9170 | 1002.54 |
+| 5 | 100 | 100 | 0 | 0.8882 | 1.3263 | 1125.85 |
+
+### Observations
+
+1. All three configurations completed 100 queries successfully.
+2. No failed queries were recorded.
+3. The five-server configuration recorded the lowest average latency in this run.
+4. The five-server configuration also recorded the highest throughput.
+5. The measurements are sequential localhost application-level results, not concurrent stress tests or Mininet network measurements.
+
+### Conclusion
+
+The benchmark runs demonstrate successful UDP DNS-like resolution
+with 1, 3 and 5 server configurations. Further repeated and
+concurrent experiments would be required to establish scalability
+and performance trends.
