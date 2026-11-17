@@ -1,0 +1,11 @@
+query_id,domain,status,ip,latency_ms
+1,video.lab,OK,10.0.1.11,0.6861
+2,video.lab,OK,10.0.2.11,0.4233
+3,video.lab,OK,10.0.3.11,0.3478
+4,video.lab,OK,10.0.4.11,0.3448
+5,video.lab,OK,10.0.5.11,0.4184
+6,video.lab,OK,10.0.1.11,0.2949
+7,video.lab,OK,10.0.2.11,0.3215
+8,video.lab,OK,10.0.3.11,0.2592
+9,video.lab,OK,10.0.4.11,0.2323
+10,video.lab,OK,10.0.5.11,0.2692

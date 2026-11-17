@@ -1,0 +1,11 @@
+query_id,domain,status,ip,latency_ms
+1,video.lab,SERVFAIL,,5007.1465
+2,video.lab,SERVFAIL,,5006.5456
+3,video.lab,SERVFAIL,,5007.528
+4,video.lab,SERVFAIL,,5007.8731
+5,video.lab,SERVFAIL,,5006.9515
+6,video.lab,SERVFAIL,,5006.599
+7,video.lab,SERVFAIL,,5005.6046
+8,video.lab,SERVFAIL,,5006.3732
+9,video.lab,SERVFAIL,,5007.2374
+10,video.lab,SERVFAIL,,5007.0292
