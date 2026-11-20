@@ -267,6 +267,7 @@ not concurrent stress tests or production network benchmarks.
 
 See the `docs/` directory:
 
+- `Team15_SRS_DNS_Name_Resolution.pdf`
 - `test_report.md`
 - `mininet_validation.md`
 - `failure_recovery_testing.md`
@@ -289,10 +290,11 @@ environments in which they were collected.
 
 ## Team Contributions
 
-**Member 1:** UDP client/server communication, caching, retries and validation.
+**Member 1 - Siddharth Singh:** UDP client/server communication, caching,
+retries and validation.
 
-**Member 2:** Mininet topology, SDN controller, heartbeat monitoring,
-round-robin traffic steering and server failover.
+**Member 2 - Veda Ashmitha:** Mininet topology, SDN controller, heartbeat
+monitoring, round-robin traffic steering and server failover.
 
-**Member 3:** Testing, integration validation, performance evaluation
-and technical documentation.
+**Member 3 - Sushanth:** Testing, integration validation, performance
+evaluation and technical documentation.
